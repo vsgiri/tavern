@@ -1,8 +1,9 @@
 import pytest
+import os
 
 from tavern.schemas.extensions import validate_extensions
 from tavern.util import exceptions
-from tavern.util.dict_util import deep_dict_merge
+from tavern.util.dict_util import deep_dict_merge, format_keys
 
 
 class TestValidateFunctions:
@@ -115,3 +116,24 @@ class TestDictMerge:
                 'deep_key_3': 'new_value_3'
             }
         }
+
+
+class TestFormat:
+
+    def test_format_environ_empty(self):
+        val = "{ENV_VARS.nothing_variable:s}"
+        variables = {}
+
+        with pytest.raises(exceptions.MissingFormatError):
+            format_keys(val, variables)
+
+    def test_format_environ_populated(self):
+        val = "{ENV_VARS.something_variable:s}"
+        variables = {}
+
+        value = "abc123"
+        os.environ["something_variable"] = value
+
+        formatted = format_keys(val, variables)
+
+        assert formatted == value

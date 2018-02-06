@@ -1,6 +1,8 @@
 import collections
+import os
 
 from future.utils import raise_from
+from box import Box
 
 from .exceptions import MissingFormatError
 
@@ -24,7 +26,7 @@ def format_keys(val, variables):
             formatted[key] = format_keys(val[key], variables)
     elif isinstance(val, str):
         try:
-            formatted = val.format(**variables)
+            formatted = val.format(ENV_VARS=Box(os.environ), **variables)
         except KeyError as e:
             raise_from(MissingFormatError(e.args), e)
 
