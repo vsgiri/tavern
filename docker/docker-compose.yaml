@@ -1,0 +1,15 @@
+---
+version: '2.1'
+
+services:
+  tavern:
+    image: taverntesting/tavern:0.5.1
+    env_file:
+      - required-env-keys.env
+    volumes:
+      - ./integration_tests:/integration_tests
+    command:
+      - --tavern-global-cfg
+      - /integration_tests/local_urls.yaml
+      - -p
+      - no:logging

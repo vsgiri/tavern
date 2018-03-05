@@ -1,0 +1,8 @@
+FROM python:3.5-alpine AS builder
+ARG TAVERNVER=0.5.1
+
+RUN apk add --no-cache --virtual .fetch-deps wget \
+    && wget https://pypi.io/packages/source/t/tavern/tavern-$TAVERNVER.tar.gz \
+    && pip3 install tavern-$TAVERNVER.tar.gz[mqtt,pytest] \
+    && apk del wget \
+    && rm -rf /var/cache/apk/*
