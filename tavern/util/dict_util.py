@@ -3,6 +3,7 @@ import logging
 
 from future.utils import raise_from
 
+from tavern.util.loader import TypeConvertToken
 from . import exceptions
 
 
@@ -26,12 +27,17 @@ def format_keys(val, variables):
         #formatted = {key: format_keys(val[key], variables) for key in val}
         for key in val:
             formatted[key] = format_keys(val[key], variables)
+    elif isinstance(val, (list, tuple)):
+        formatted = [format_keys(item, variables) for item in val]
     elif isinstance(val, str):
         try:
             formatted = val.format(**variables)
         except KeyError as e:
             logger.error("Key(s) not found in format: %s", e.args)
             raise_from(exceptions.MissingFormatError(e.args), e)
+    elif isinstance(val, TypeConvertToken):
+        value = format_keys(val.value, variables)
+        formatted = val.constructor(value)
 
     return formatted
 
@@ -124,6 +130,30 @@ def yield_keyvals(block):
     Given a list or dict, return a 3-tuple of the 'split' key (key split on
     dots), the original key, and the expected value. If the input is a list, it
     is enumerated so the 'keys' are just [0, 1, 2, ...]
+
+    Example:
+
+        Matching a dictionary with a couple of keys:
+
+        >>> gen = yield_keyvals({"a": {"b": "c"}})
+        >>> next(gen)
+        (['a'], 'a', {'b': 'c'})
+
+        Matching nested key access:
+
+        >>> gen = yield_keyvals({"a.b.c": "d"})
+        >>> next(gen)
+        (['a', 'b', 'c'], 'a.b.c', 'd')
+
+        Matching a list of items:
+
+        >>> gen = yield_keyvals(["a", "b", "c"])
+        >>> next(gen)
+        (['0'], '0', 'a')
+        >>> next(gen)
+        (['1'], '1', 'b')
+        >>> next(gen)
+        (['2'], '2', 'c')
 
     Args:
         block (dict, list): input matches
