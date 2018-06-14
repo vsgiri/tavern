@@ -2,6 +2,7 @@ import logging
 import argparse
 from argparse import ArgumentParser #, ArgumentTypeError
 
+from .testutils.pytesthook import add_parser_options
 from .core import run
 
 
@@ -16,13 +17,6 @@ class TavernArgParser(ArgumentParser):
         self.add_argument(
             "in_file",
             help="Input file with tests in",
-        )
-
-        self.add_argument(
-            "--tavern-global-cfg",
-            required=False,
-            nargs="+",
-            help="One or more global configuration files to include in every test",
         )
 
         self.add_argument(
@@ -45,6 +39,8 @@ class TavernArgParser(ArgumentParser):
             action="store_true",
             default=False,
         )
+
+        add_parser_options(self.add_argument)
 
 
 def main():
@@ -71,10 +67,20 @@ def main():
                 "formatter": "default",
                 "stream": "ext://sys.stdout",
             },
+            "nothing": {
+                "class": "logging.NullHandler",
+            }
         },
         "loggers": {
             "tavern": {
                 "handlers": [
+                    "nothing",
+                ],
+                "level": log_level,
+            },
+            "": {
+                "handlers": [
+                    "nothing",
                 ],
                 "level": log_level,
             }

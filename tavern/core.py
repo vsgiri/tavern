@@ -1,5 +1,6 @@
 import logging
 import os
+import io
 
 import yaml
 
@@ -7,6 +8,7 @@ from contextlib2 import ExitStack
 from box import Box
 
 from .util.general import load_global_config
+from .plugins import load_plugins
 from .util import exceptions
 from .util.dict_util import format_keys
 from .util.delay import delay
@@ -70,7 +72,7 @@ def run_test(in_file, test_spec, global_cfg):
     logger.info("Running test : %s", test_block_name)
 
     with ExitStack() as stack:
-        sessions = get_extra_sessions(test_spec)
+        sessions = get_extra_sessions(test_spec, test_block_config)
 
         for name, session in sessions.items():
             logger.debug("Entering context for %s", name)
@@ -78,50 +80,58 @@ def run_test(in_file, test_spec, global_cfg):
 
         # Run tests in a path in order
         for stage in test_spec["stages"]:
-            name = stage["name"]
+            if stage.get('skip'):
+                continue
 
-            try:
-                r = get_request_type(stage, test_block_config, sessions)
-            except exceptions.MissingFormatError:
-                log_fail(stage, None, None)
-                raise
+            run_stage(sessions, stage, tavern_box, test_block_config)
 
-            tavern_box.update(request_vars=r.request_vars)
-
-            try:
-                expected = get_expected(stage, test_block_config, sessions)
-            except exceptions.TavernException:
-                log_fail(stage, None, None)
-                raise
-
-            delay(stage, "before")
-
-            logger.info("Running stage : %s", name)
-
-            try:
-                response = r.run()
-            except exceptions.TavernException:
-                log_fail(stage, None, expected)
-                raise
-
-            verifiers = get_verifiers(stage, test_block_config, sessions, expected)
-
-            for v in verifiers:
-                try:
-                    saved = v.verify(response)
-                except exceptions.TavernException:
-                    log_fail(stage, v, expected)
-                    raise
-                else:
-                    test_block_config["variables"].update(saved)
-
-            log_pass(stage, verifiers)
-
-            tavern_box.pop("request_vars")
-            delay(stage, "after")
+            if stage.get('only'):
+                break
 
 
-def run(in_file, tavern_global_cfg):
+def run_stage(sessions, stage, tavern_box, test_block_config):
+    name = stage["name"]
+
+    try:
+        r = get_request_type(stage, test_block_config, sessions)
+    except exceptions.MissingFormatError:
+        log_fail(stage, None, None)
+        raise
+
+    tavern_box.update(request_vars=r.request_vars)
+
+    try:
+        expected = get_expected(stage, test_block_config, sessions)
+    except exceptions.TavernException:
+        log_fail(stage, None, None)
+        raise
+
+    delay(stage, "before")
+
+    logger.info("Running stage : %s", name)
+    try:
+        response = r.run()
+    except exceptions.TavernException:
+        log_fail(stage, None, expected)
+        raise
+
+    verifiers = get_verifiers(stage, test_block_config, sessions, expected)
+    for v in verifiers:
+        try:
+            saved = v.verify(response)
+        except exceptions.TavernException:
+            log_fail(stage, v, expected)
+            raise
+        else:
+            test_block_config["variables"].update(saved)
+
+    log_pass(stage, verifiers)
+
+    tavern_box.pop("request_vars")
+    delay(stage, "after")
+
+
+def run(in_file, tavern_global_cfg, tavern_http_backend, tavern_mqtt_backend):
     """Run all tests contained in a file
 
     For each test this makes sure it matches the expected schema, then runs it.
@@ -150,11 +160,22 @@ def run(in_file, tavern_global_cfg):
     global_cfg_paths = tavern_global_cfg
     global_cfg = load_global_config(global_cfg_paths)
 
-    with open(in_file, "r") as infile:
+    global_cfg["backends"] = {
+        "http": tavern_http_backend,
+        "mqtt": tavern_mqtt_backend,
+    }
+
+    load_plugins(global_cfg)
+
+    with io.open(in_file, "r", encoding="utf-8") as infile:
         # Multiple documents per file => multiple test paths per file
         for test_spec in yaml.load_all(infile, Loader=IncludeLoader):
             if not test_spec:
                 logger.warning("Empty document in input file '%s'", in_file)
+                continue
+
+            if "_xfail" in test_spec:
+                logger.info("_xfail does not work with tavern-ci cli, skipping test")
                 continue
 
             try:

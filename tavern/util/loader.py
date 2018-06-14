@@ -1,7 +1,10 @@
 # https://gist.github.com/joshbode/569627ced3076931b02f
 
+import logging
 import uuid
 import os.path
+import pytest
+from future.utils import raise_from
 
 import yaml
 from yaml.reader import Reader
@@ -12,6 +15,9 @@ from yaml.constructor import SafeConstructor
 from yaml.resolver import Resolver
 
 from tavern.util.exceptions import BadSchemaError
+
+
+logger = logging.getLogger(__name__)
 
 
 def makeuuid(loader, node):
@@ -80,7 +86,16 @@ def construct_include(loader, node):
         return yaml.load(f, IncludeLoader)
 
 
+IncludeLoader.add_constructor("!include", construct_include)
+IncludeLoader.add_constructor("!uuid", makeuuid)
+
+
 class TypeSentinel(yaml.YAMLObject):
+    """This is a sentinel for expecting a type in a response. Any value
+    associated with these is going to be ignored - these are only used as a
+    'hint' to the validator that it should expect a specific type in the
+    response.
+    """
     yaml_loader = IncludeLoader
 
     @classmethod
@@ -103,6 +118,10 @@ class StrSentinel(TypeSentinel):
     yaml_tag = "!anystr"
     constructor = str
 
+class BoolSentinel(TypeSentinel):
+    yaml_tag = "!anybool"
+    constructor = bool
+
 class AnythingSentinel(TypeSentinel):
     yaml_tag = "!anything"
     constructor = "anything"
@@ -111,52 +130,89 @@ class AnythingSentinel(TypeSentinel):
     def from_yaml(cls, loader, node):
         return ANYTHING
 
+    @classmethod
+    def to_yaml(cls, dumper, data):
+        node = yaml.nodes.ScalarNode(cls.yaml_tag, "", style=cls.yaml_flow_style)
+        return node
+
 
 # One instance of this
 ANYTHING = AnythingSentinel()
 
 
-def represent_type_sentinel(sentinel_type):
-    """Represent a type sentinel so it can be dumped in a format such that it
-    can be read again later
+class TypeConvertToken(yaml.YAMLObject):
+    """This is a sentinel for something that should be converted to a different
+    type. The rough load order is:
+
+    1. Test data is loaded for schema validation
+    2. Test data is dumped again so that pykwalify can read it (the actual
+        values don't matter at all at this point, because we're just checking
+        that the structure is correct)
+    3. Test data is loaded and formatted
+
+    So this preserves the actual value that the type should be up until the
+    point that it actually needs to be formatted
     """
+    yaml_loader = IncludeLoader
 
-    def callback(representer, tag, style=None):
-        # pylint: disable=unused-argument
-        node = yaml.nodes.ScalarNode(sentinel_type.yaml_tag, "", style=style)
-        return node
-
-    return callback
-
-
-# Could also just use a metaclass for this
-yaml.representer.Representer.add_representer(AnythingSentinel, represent_type_sentinel)
-
-IncludeLoader.add_constructor("!include", construct_include)
-IncludeLoader.add_constructor("!uuid", makeuuid)
-
-
-class TypeConvertToken(object):
     def __init__(self, value):
         self.value = value
 
+    @classmethod
+    def from_yaml(cls, loader, node):
+        value = loader.construct_scalar(node)
+
+        try:
+            # See if it's already a valid value (eg, if we do `!int "2"`)
+            converted = cls.constructor(value) # pylint: disable=no-member
+        except ValueError:
+            # If not (eg, `!int "{int_value:d}"`)
+            return cls(value)
+        else:
+            return converted
+
+    @classmethod
+    def to_yaml(cls, dumper, data):
+        return yaml.nodes.ScalarNode(cls.yaml_tag, data.value, style=cls.yaml_flow_style)
+
 
 class IntToken(TypeConvertToken):
+    yaml_tag = "!int"
     constructor = int
 
 
 class FloatToken(TypeConvertToken):
+    yaml_tag = "!float"
     constructor = float
 
 
-def construct_type_convert(sentinel_type):
-
-    def callback(loader, node):
-        value = loader.construct_scalar(node)
-        return sentinel_type(value)
-
-    return callback
+class BoolToken(TypeConvertToken):
+    yaml_tag = "!bool"
+    constructor = bool
 
 
-yaml.loader.Loader.add_constructor("!int", construct_type_convert(IntSentinel))
-yaml.loader.Loader.add_constructor("!float", construct_type_convert(FloatSentinel))
+# Sort-of hack to try and avoid future API changes
+ApproxScalar = type(pytest.approx(1.0))
+
+class ApproxSentinel(yaml.YAMLObject, ApproxScalar):
+    yaml_tag = "!approx"
+    yaml_loader = IncludeLoader
+
+    @classmethod
+    def from_yaml(cls, loader, node):
+        # pylint: disable=unused-argument
+        try:
+            val = float(node.value)
+        except TypeError as e:
+            logger.error("Could not coerce '%s' to a float for use with !approx", type(node.value))
+            raise_from(BadSchemaError, e)
+
+        return pytest.approx(val)
+
+    @classmethod
+    def to_yaml(cls, dumper, data):
+        return yaml.nodes.ScalarNode("!approx", str(data.expected), style=cls.yaml_flow_style)
+
+
+# Apparently this isn't done automatically?
+yaml.dumper.Dumper.add_representer(ApproxScalar, ApproxSentinel.to_yaml)
