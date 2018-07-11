@@ -224,8 +224,10 @@ def validate_json_with_extensions(value, rule_obj, path):
     """
     validate_extensions(value, rule_obj, path)
 
-    if not isinstance(value, (list, dict)):
-        raise BadSchemaError("Error at {} - expected a list or dict".format(path))
+    import yaml
+    yaml.dump(value)
+    # if not isinstance(value, (list, dict)):
+    #     raise BadSchemaError("Error at {} - expected a list or dict".format(path))
 
     def nested_values(d):
         if isinstance(d, dict):

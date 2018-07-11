@@ -155,7 +155,7 @@ class RestResponse(BaseResponse):
         try:
             body = response.json()
         except ValueError:
-            body = None
+            body = response.content.decode("utf8")
 
         self._check_status_code(response.status_code, body)
 

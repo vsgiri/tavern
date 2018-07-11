@@ -118,3 +118,23 @@ stages:
       status_code: 200
       body:
         status: ok
+
+
+---
+
+test_name: Test matching a raw body
+
+includes:
+  - !include common.yaml
+
+stages:
+  - name: Expect just a string back
+    request:
+      url: "{host}/headers"
+      method: GET
+    response:
+      status_code: 200
+      body: OK
+      save:
+        body:
+          a: "0"
