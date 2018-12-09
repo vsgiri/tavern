@@ -20,7 +20,7 @@ class TavernClient(object):
                 "Must specify one of names_contain, mark_specifier, or filename"
             )
 
-        joined_args = ["--disable-pytest-warnings", "--no-cov", "-qqqqqqqq"]
+        joined_args = ["--disable-pytest-warnings", "--no-cov", "-qqqqqqqq", "-s"]
 
         name = "tavern:"
 
