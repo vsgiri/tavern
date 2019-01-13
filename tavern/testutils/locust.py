@@ -22,17 +22,17 @@ class TavernClient(object):
 
         joined_args = ["--disable-pytest-warnings", "--no-cov", "-qqqqqqqq", "-s"]
 
-        name = "tavern:"
+        name = "tavern"
 
         if filename:
             joined_args += [filename]
-            name += ",f:{}".format(filename)
+            name += "/f:{}".format(filename)
         if mark_specifier:
             joined_args += ["-m", mark_specifier]
-            name += ",m:{}".format(",".join(mark_specifier).replace(" ", ""))
+            name += "/m:{}".format(",".join(mark_specifier).replace(" ", ""))
         if names_contain:
             joined_args += ["-k", names_contain]
-            name += ",k:{}".format(",".join(names_contain).replace(" ", ""))
+            name += "/k:{}".format(",".join(names_contain).replace(" ", ""))
 
         start_time = time.time()
         try:
@@ -40,7 +40,10 @@ class TavernClient(object):
         except Exception as e:
             total_time = int((time.time() - start_time) * 1000)
             events.request_failure.fire(
-                request_type="tavern", name=name, response_time=total_time, exception=e
+                request_type="tavern",
+                name=name,
+                response_time=total_time,
+                exception=e
             )
         else:
             total_time = int((time.time() - start_time) * 1000)

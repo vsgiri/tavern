@@ -28,5 +28,5 @@ class MyTaskSet(TaskSet):
 
 class MyLocust(TavernLocust):
     task_set = MyTaskSet
-    min_wait = 500
-    max_wait = 1500
+    min_wait = 5
+    max_wait = 15
