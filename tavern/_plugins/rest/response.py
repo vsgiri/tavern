@@ -4,11 +4,6 @@ import logging
 import copy
 from builtins import str as ustr
 
-try:
-    from urllib.parse import urlparse, parse_qs
-except ImportError:
-    from urlparse import urlparse, parse_qs  # type: ignore
-
 from requests.status_codes import _codes
 
 from tavern.schemas.extensions import get_wrapped_response_function
