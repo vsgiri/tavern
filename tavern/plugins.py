@@ -34,7 +34,7 @@ def is_valid_reqresp_plugin(ext):
         Not all of these are required for all request/response types probably
 
     Args:
-        ext (object): class or module plugin object
+        ext: class or module plugin object
 
     Returns:
         bool: Whether the plugin has everything we need to use it
